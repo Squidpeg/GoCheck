@@ -1,0 +1,126 @@
+package main
+
+import (
+	"container/heap"
+	"fmt"
+    "math"
+)
+
+type Node struct {
+	ID       int
+	Cost     int
+	Score    int
+	Parent   *Node
+	Position [2]int
+}
+
+type PriorityQueue []*Node
+
+func (pq PriorityQueue) Len() int { return len(pq) }
+func (pq PriorityQueue) Less(i, j int) bool { return pq[i].Score < pq[j].Score }
+func (pq PriorityQueue) Swap(i, j int) { pq[i], pq[j] = pq[j], pq[i] }
+func (pq *PriorityQueue) Push(x interface{}) { *pq = append(*pq, x.(*Node)) }
+func (pq *PriorityQueue) Pop() interface{} {
+	old := *pq
+	n := len(old)
+	item := old[n-1]
+	*pq = old[0 : n-1]
+	return item
+}
+
+func aStar(startNode, goalNode *Node, graph map[int][]*Node, heuristic func([2]int, [2]int) int) ([]*Node, int) {
+	openSet := make(PriorityQueue, 0)
+	heap.Push(&openSet, startNode)
+	cameFrom := make(map[int]*Node)
+	gScore := make(map[int]int)
+	fScore := make(map[int]int)
+	for id := range graph {
+		gScore[id] = int(^uint(0) >> 1)
+		fScore[id] = int(^uint(0) >> 1)
+	}
+	gScore[startNode.ID] = 0
+	fScore[startNode.ID] = heuristic(startNode.Position, goalNode.Position)
+	for openSet.Len() > 0 {
+		current := heap.Pop(&openSet).(*Node)
+		if current.ID == goalNode.ID {
+			return reconstructPath(cameFrom, current), gScore[goalNode.ID]
+		}
+		for _, neighbor := range graph[current.ID] {
+			tentativeGScore := gScore[current.ID] + neighbor.Cost
+			if tentativeGScore < gScore[neighbor.ID] {
+				cameFrom[neighbor.ID] = current
+				gScore[neighbor.ID] = tentativeGScore
+				fScore[neighbor.ID] = gScore[neighbor.ID] + heuristic(neighbor.Position, goalNode.Position)
+				if !inOpenSet(neighbor, &openSet) {
+					heap.Push(&openSet, neighbor)
+				}
+			}
+		}
+	}
+	return nil, -1
+}
+
+func reconstructPath(cameFrom map[int]*Node, current *Node) []*Node {
+	totalPath := []*Node{current}
+	for current.Parent != nil {
+		current = current.Parent
+		totalPath = append([]*Node{current}, totalPath...)
+	}
+	return totalPath
+}
+
+func inOpenSet(node *Node, openSet *PriorityQueue) bool {
+	for _, n := range *openSet {
+		if n.ID == node.ID {
+			return true
+		}
+	}
+	return false
+}
+
+func main() {
+	graph := make(map[int][]*Node)
+
+	gridWidth := 5
+	gridHeight := 5
+	for y := 0; y < gridHeight; y++ {
+		for x := 0; x < gridWidth; x++ {
+			id := y*gridWidth + x
+			graph[id] = []*Node{} 
+		}
+	}
+
+	for y := 0; y < gridHeight; y++ {
+		for x := 0; x < gridWidth; x++ {
+			id := y*gridWidth + x
+			if x > 0 { 
+				graph[id] = append(graph[id], &Node{ID: id - 1, Cost: 1, Position: [2]int{x - 1, y}})
+			}
+			if x < gridWidth-1 { 
+				graph[id] = append(graph[id], &Node{ID: id + 1, Cost: 1, Position: [2]int{x + 1, y}})
+			}
+			if y > 0 { 
+				graph[id] = append(graph[id], &Node{ID: id - gridWidth, Cost: 1, Position: [2]int{x, y - 1}})
+			}
+			if y < gridHeight-1 { 
+				graph[id] = append(graph[id], &Node{ID: id + gridWidth, Cost: 1, Position: [2]int{x, y + 1}})
+			}
+		}
+	}
+
+	startNode := &Node{ID: 0, Position: [2]int{0, 0}} 
+	goalNode := &Node{ID: 24, Position: [2]int{4, 4}} 
+
+	heuristic := func(a, b [2]int) int {
+		return int(math.Abs(float64(a[0]-b[0])) + math.Abs(float64(a[1]-b[1])))
+	}
+
+	// Run A* algorithm
+	path, cost := aStar(startNode, goalNode, graph, heuristic)
+
+	fmt.Printf("Path cost: %d\n", cost)
+	fmt.Println("Path:")
+	for _, node := range path {
+		fmt.Printf("-> Node ID: %d, Position: (%d, %d)\n", node.ID, node.Position[0], node.Position[1])
+	}
+}
